@@ -4,25 +4,17 @@ const fs = require('fs');
 const path = require('path');
 
 async function start() {
-    // 聚合你提供的所有有效点播资源站
+    // 原始资源列表
     const CMS_SOURCES = [
-        { name: "🎬-爱奇艺-", api: "https://iqiyizyapi.com/api.php/provide/vod" },
-        { name: "🎬豆瓣资源", api: "https://caiji.dbzy5.com/api.php/provide/vod" },
-        { name: "🎬天涯影视", api: "https://tyyszy.com/api.php/provide/vod" },
-        { name: "🎬茅台资源", api: "https://caiji.maotaizy.cc/api.php/provide/vod" },
-        { name: "🎬卧龙资源", api: "https://wolongzyw.com/api.php/provide/vod" },
-        { name: "🎬iKun资源", api: "https://ikunzyapi.com/api.php/provide/vod" },
-        { name: "🎬电影天堂", api: "http://caiji.dyttzyapi.com/api.php/provide/vod" },
-        { name: "🎬猫眼资源", api: "https://api.maoyanapi.top/api.php/provide/vod" },
-        { name: "🎬量子资源", api: "https://cj.lzcaiji.com/api.php/provide/vod" },
-        { name: "🎬360 资源", api: "https://360zyzz.com/api.php/provide/vod" },
-        { name: "🎬极速资源", api: "https://jszyapi.com/api.php/provide/vod" },
-        { name: "🎬非凡资源", api: "https://api.ffzyapi.com/api.php/provide/vod" },
-        { name: "🎬暴风资源", api: "https://bfzyapi.com/api.php/provide/vod" },
-        { name: "🎬最大资源", api: "https://api.zuidapi.com/api.php/provide/vod" },
-        { name: "🎬无尽资源", api: "https://api.wujinapi.me/api.php/provide/vod" },
-        { name: "🎬红牛资源", api: "https://www.hongniuzy2.com/api.php/provide/vod" },
-        { name: "🎬艾旦影视", api: "https://pz.v88.qzz.io/?url=https://lovedan.net/api.php/provide/vod" }
+        { id: "iqiyi", name: "🎬爱奇艺", api: "https://iqiyizyapi.com/api.php/provide/vod" },
+        { name: "🎬豆瓣资源", id: "dbzy", api: "https://caiji.dbzy5.com/api.php/provide/vod" },
+        { name: "🎬量子资源", id: "lzzy", api: "https://cj.lzcaiji.com/api.php/provide/vod" },
+        { name: "🎬非凡资源", id: "ffzy", api: "https://api.ffzyapi.com/api.php/provide/vod" },
+        { name: "🎬暴风资源", id: "bfzy", api: "https://bfzyapi.com/api.php/provide/vod" },
+        { name: "🎬红牛资源", id: "hnzy", api: "https://www.hongniuzy2.com/api.php/provide/vod" },
+        { name: "🎬最大资源", id: "zdzy", api: "https://api.zuidapi.com/api.php/provide/vod" },
+        { name: "🎬无尽资源", id: "wjzy", api: "https://api.wujinapi.me/api.php/provide/vod" },
+        { name: "🎬艾旦影视", id: "aidan", api: "https://pz.v88.qzz.io/?url=https://lovedan.net/api.php/provide/vod" }
     ];
 
     const SAVE_DIR = path.join(__dirname, '../data');
@@ -32,43 +24,41 @@ async function start() {
     try {
         if (!fs.existsSync(SAVE_DIR)) fs.mkdirSync(SAVE_DIR, { recursive: true });
 
-        console.log("🚀 开始抓取并生成双格式文件...");
+        // 1. 转换成 DecoTV 要求的 api_site 对象结构
+        const api_site = {};
+        CMS_SOURCES.forEach(item => {
+            api_site[item.id] = {
+                api: item.api,
+                name: item.name,
+                detail: item.api.split('/api.php')[0] // 自动推导 detail 链接
+            };
+        });
 
-        // 转换为 DecoTV 标准站点格式
-        const sites = CMS_SOURCES.map((item, index) => ({
-            key: `site_${index}_${Math.random().toString(36).slice(2, 5)}`,
-            name: item.name,
-            type: 1, // CMS 采集站
-            api: item.api,
-            searchable: 1,
-            quickSearch: 1,
-            filterable: 1,
-            ext: {
-                threads: 32,
-                buffer: 104857600
-            }
-        }));
-
-        // 根结构
-        const finalData = {
-            sites: sites,
-            updated: new Date().toLocaleString()
+        // 2. 构建符合示例的完整配置文件
+        const finalConfig = {
+            cache_time: 7200,
+            api_site: api_site,
+            custom_category: [
+                { name: "电影", type: "movie", query: "电影" },
+                { name: "电视剧", type: "tv", query: "电视剧" },
+                { name: "综艺", type: "variety", query: "综艺" },
+                { name: "动漫", type: "anime", query: "动漫" }
+            ]
         };
 
-        const jsonStr = JSON.stringify(finalData, null, 2); // 格式化 JSON，增加可读性
+        const jsonStr = JSON.stringify(finalConfig, null, 2);
 
-        // 1. 保存为纯 JSON 文件
+        // 保存纯 JSON 文件
         fs.writeFileSync(JSON_PATH, jsonStr);
-        console.log(`✅ JSON 格式已保存至: data/subscribe.json`);
-
-        // 2. 保存为 Base58 编码文件
-        const encoded = bs58.encode(Buffer.from(JSON.stringify(finalData)));
+        
+        // 生成 Base58 编码文件
+        const encoded = bs58.encode(Buffer.from(JSON.stringify(finalConfig)));
         fs.writeFileSync(B58_PATH, encoded);
-        console.log(`✅ Base58 格式已保存至: data/subscribe.b58`);
 
-        console.log(`\n🎉 任务全部完成！共计聚合 ${sites.length} 个站点。`);
+        console.log(`✅ 适配成功！共打包 ${Object.keys(api_site).length} 个站点。`);
+        console.log(`请复制 data/subscribe.json 的内容到 DecoTV 后台。`);
     } catch (e) {
-        console.error("❌ 抓取脚本执行失败:", e.message);
+        console.error("❌ 转换失败:", e.message);
         process.exit(1);
     }
 }
