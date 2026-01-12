@@ -4,17 +4,13 @@ const fs = require('fs');
 const path = require('path');
 
 async function start() {
-    // 聚合资源站 - 优先挑选已知速度较快的 CMS
     const CMS_SOURCES = [
-        { id: "iqiyi", name: "🎬爱奇艺", api: "https://iqiyizyapi.com/api.php/provide/vod" },
-        { id: "dbzy", name: "🎬豆瓣资源", api: "https://caiji.dbzy5.com/api.php/provide/vod" },
+        { id: "iqiyi", name: "🚀极速-爱奇艺", api: "https://iqiyizyapi.com/api.php/provide/vod" },
+        { id: "dbzy", name: "🚀极速-豆瓣", api: "https://caiji.dbzy5.com/api.php/provide/vod" },
+        { id: "aidan", name: "🎬高码-艾旦", api: "https://pz.v88.qzz.io/?url=https://lovedan.net/api.php/provide/vod" },
         { id: "lzzy", name: "🎬量子资源", api: "https://cj.lzcaiji.com/api.php/provide/vod" },
         { id: "ffzy", name: "🎬非凡资源", api: "https://api.ffzyapi.com/api.php/provide/vod" },
-        { id: "bfzy", name: "🎬暴风资源", api: "https://bfzyapi.com/api.php/provide/vod" },
-        { id: "hnzy", name: "🎬红牛资源", api: "https://www.hongniuzy2.com/api.php/provide/vod" },
-        { id: "zdzy", name: "🎬最大资源", api: "https://api.zuidapi.com/api.php/provide/vod" },
-        { id: "wjzy", name: "🎬无尽资源", api: "https://api.wujinapi.me/api.php/provide/vod" },
-        { id: "aidan", name: "🎬艾旦影视", api: "https://pz.v88.qzz.io/?url=https://lovedan.net/api.php/provide/vod" }
+        { id: "hnzy", name: "🎬红牛资源", api: "https://www.hongniuzy2.com/api.php/provide/vod" }
     ];
 
     const SAVE_DIR = path.join(__dirname, '../data');
@@ -30,20 +26,25 @@ async function start() {
                 api: item.api,
                 name: item.name,
                 detail: item.api.split('/api.php')[0],
-                // --- 核心优化参数注入 ---
+                // 针对 Web 播放引擎的极限优化
                 ext: {
-                    "threads": 32,              // 开启 32 多线程下载
-                    "buffer": 104857600,        // 缓冲区设为 100MB (1024*1024*100)
-                    "sniff": 1,                 // 强制嗅探
+                    "flag": ["m3u8", "hls", "mp4"],
+                    "threads": 64,                  // 将线程提升到 64，强制多切片并发
+                    "buffer": 209715200,            // 缓冲区扩大到 200MB
+                    "p2p": 1,                       // 尝试开启 p2p 加速（如果播放器支持）
+                    "parse": 1,                     // 开启智能解析
+                    "timeout": 15,                  // 缩短超时，快速切换线路
                     "headers": {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                        "Origin": item.api.split('/api.php')[0],
+                        "Referer": item.api.split('/api.php')[0]
                     }
                 }
             };
         });
 
         const finalConfig = {
-            cache_time: 7200,
+            cache_time: 3600, // 减小缓存时间，保证源的活性
             api_site: api_site,
             custom_category: [
                 { name: "电影", type: "movie", query: "电影" },
@@ -55,14 +56,13 @@ async function start() {
 
         const jsonStr = JSON.stringify(finalConfig, null, 2);
         fs.writeFileSync(JSON_PATH, jsonStr);
-        const encoded = bs58.encode(Buffer.from(JSON.stringify(finalData))); // 注意这里如果没定义 finalData 请改为 finalConfig
-        // 修正逻辑，确保变量一致
+        
         const b58_encoded = bs58.encode(Buffer.from(JSON.stringify(finalConfig)));
         fs.writeFileSync(B58_PATH, b58_encoded);
 
-        console.log(`✅ 性能加速版配置已生成！`);
+        console.log(`✅ 加速版配置生成成功！共 ${Object.keys(api_site).length} 个资源点。`);
     } catch (e) {
-        console.error("❌ 转换失败:", e.message);
+        console.error("❌ 失败:", e.message);
         process.exit(1);
     }
 }
