@@ -3,49 +3,63 @@ const bs58 = require('bs58');
 const fs = require('fs');
 const path = require('path');
 
-// 配置信息
-const RAW_URL = "https://pz.v88.qzz.io?format=2&source=full";
-const SAVE_DIR = path.join(__dirname, '../data');
-const SAVE_PATH = path.join(SAVE_DIR, 'subscribe.b58');
-
 async function start() {
+    const RAW_URL = "https://pz.v88.qzz.io?format=2&source=full";
+    // 确保路径在根目录下的 data 文件夹
+    const SAVE_DIR = path.join(__dirname, '../data');
+    const SAVE_PATH = path.join(SAVE_DIR, 'subscribe.b58');
+
     try {
-        // 确保目录存在
-        if (!fs.existsSync(SAVE_DIR)) fs.mkdirSync(SAVE_DIR);
+        // 1. 自动创建目录
+        if (!fs.existsSync(SAVE_DIR)) {
+            fs.mkdirSync(SAVE_DIR, { recursive: true });
+        }
 
-        console.log("正在从原始源获取数据...");
-        const res = await axios.get(RAW_URL);
-        const rawList = Array.isArray(res.data) ? res.data : [];
+        console.log("正在连接源服务器...");
+        const res = await axios.get(RAW_URL, { 
+            timeout: 60000, // 60秒超时，应对高延迟
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
 
-        // 筛选前 20 个并注入大吞吐参数
-        const refinedList = rawList.slice(0, 20).map(item => ({
-            name: item.name,
+        // 2. 格式校验与筛选
+        let rawList = [];
+        if (Array.isArray(res.data)) {
+            rawList = res.data;
+        } else if (res.data && Array.isArray(res.data.data)) {
+            rawList = res.data.data;
+        }
+
+        // 筛选前20个，注入大吞吐参数
+        const processed = rawList.slice(0, 20).map(item => ({
+            name: item.name || "优质线路",
             url: item.url,
             logo: item.logo || "",
-            group: "极速大吞吐专区",
-            params: {
-                // 核心：增加缓冲区大小和超时时间，对抗高延迟
-                buffer_size: "100MB",
-                connection_timeout: 30000,
-                read_timeout: 60000
+            group: "极速专区",
+            // 注入符合 DecoTV 的播放优化参数
+            meta: {
+                ua: "Lavf/58.29.100",
+                buffer: "100MB",
+                timeout: 30000
             }
         }));
 
-        const finalJson = {
-            version: "2.0",
-            name: "自动更新源",
-            updated_at: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }),
-            channels: refinedList
+        const finalOutput = {
+            status: "success",
+            updated: new Date().toISOString(),
+            data: processed
         };
 
-        // 转为 Base58 编码
-        const encoded = bs58.encode(Buffer.from(JSON.stringify(finalJson)));
+        // 3. Base58 编码
+        const jsonStr = JSON.stringify(finalOutput);
+        const encoded = bs58.encode(Buffer.from(jsonStr));
         
         fs.writeFileSync(SAVE_PATH, encoded);
-        console.log(`✅ 成功生成！共 ${refinedList.length} 个频道。`);
+        console.log(`✅ 成功! 文件已写入: ${SAVE_PATH}`);
     } catch (e) {
-        console.error("❌ 抓取失败:", e.message);
-        process.exit(1);
+        console.error("❌ 运行出错详情:");
+        console.error(e.message);
+        process.exit(1); 
     }
 }
+
 start();
